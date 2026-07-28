@@ -9,6 +9,7 @@ namespace JogoRPG
     internal abstract class Item
     {
         public string Nome { get; set; }
+        public bool AlvoEhInimigo { get; protected set; } = false;
 
         protected Item(string nome)
         {

@@ -1,43 +1,97 @@
-﻿using System;
-using System.Collections.Generic;
-// Program.cs
+﻿// Program.cs
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 
 namespace JogoRPG
 {
+    internal class PersonagemSalvo
+    {
+        public string Tipo { get; set; }
+        public string Nome { get; set; }
+        public int Vida { get; set; }
+    }
+
+    internal class JogoSalvo
+    {
+        public int Ouro { get; set; }
+        public int Onda { get; set; }
+        public List<PersonagemSalvo> Time { get; set; }
+        public List<string> Inventario { get; set; }
+    }
+
     internal class Program
     {
         static Random rng = new Random();
+        const string ArquivoSave = "save.json";
 
         static void Main(string[] args)
         {
-            Console.WriteLine("===== MONTE SEU TIME (2 personagens) =====");
-            List<Personagem> timeJogador = new List<Personagem>
+            List<Personagem> timeJogador;
+            List<Item> inventarioJogador;
+            int ouro;
+            int onda;
+
+            Console.WriteLine("1 - Novo jogo  2 - Carregar jogo salvo");
+            int opcaoInicial = LerOpcaoEntre(1, 2);
+
+            if (opcaoInicial == 2 && File.Exists(ArquivoSave))
             {
-                EscolherPersonagem("Herói 1"),
-                EscolherPersonagem("Herói 2"),
-            };
-
-            List<Personagem> timeInimigo = new List<Personagem>
+                CarregarJogo(out timeJogador, out inventarioJogador, out ouro, out onda);
+            }
+            else
             {
-                CriarPersonagem(rng.Next(1, 5), "Inimigo 1"),
-                CriarPersonagem(rng.Next(1, 5), "Inimigo 2"),
-            };
+                if (opcaoInicial == 2)
+                    Console.WriteLine("Nenhum save encontrado. Iniciando novo jogo.");
 
-            List<Item> inventarioJogador = new List<Item>
+                timeJogador = new List<Personagem> { EscolherPersonagem("Herói 1"), EscolherPersonagem("Herói 2") };
+                inventarioJogador = new List<Item> { new PocaoCura(25), new PocaoCura(25) };
+                ouro = 50;
+                onda = 1;
+            }
+
+            while (TimeVivo(timeJogador))
             {
-                new PocaoCura(25),
-                new PocaoCura(25),
-                new PocaoForca(5),
-            };
+                Console.WriteLine($"\n########## ONDA {onda} ##########");
+                var timeInimigo = new List<Personagem>
+                {
+                    CriarPersonagem(rng.Next(1, 6), $"Inimigo {onda}-1"),
+                    CriarPersonagem(rng.Next(1, 6), $"Inimigo {onda}-2"),
+                };
+                Console.WriteLine("Inimigos:");
+                foreach (var i in timeInimigo)
+                    Console.WriteLine($" - {i.Nome} ({i.GetType().Name})");
 
-            Console.WriteLine("\nSeu time enfrenta:");
-            foreach (var i in timeInimigo)
-                Console.WriteLine($" - {i.Nome} ({i.GetType().Name})");
+                bool venceu = Batalha(timeJogador, timeInimigo, inventarioJogador);
+                if (!venceu) break;
 
-            List<Personagem> ordemDeTurno = new List<Personagem>();
+                int recompensa = 30 + rng.Next(0, 20);
+                ouro += recompensa;
+                Console.WriteLine($"\nVocê venceu a onda {onda}! +{recompensa} de ouro (total: {ouro})");
+
+                Console.WriteLine("\n1 - Ir à loja  2 - Continuar  3 - Salvar e sair");
+                int op = LerOpcaoEntre(1, 3);
+                if (op == 1) Loja(inventarioJogador, ref ouro);
+                else if (op == 3)
+                {
+                    SalvarJogo(timeJogador, inventarioJogador, ouro, onda + 1);
+                    return;
+                }
+
+                onda++;
+            }
+
+            Console.WriteLine(TimeVivo(timeJogador) ? "" : "\n💀 Fim de jogo — seu time foi derrotado.");
+        }
+
+        static bool Batalha(List<Personagem> timeJogador, List<Personagem> timeInimigo, List<Item> inventarioJogador)
+        {
+            var ordemDeTurno = new List<Personagem>();
             ordemDeTurno.AddRange(timeJogador);
             ordemDeTurno.AddRange(timeInimigo);
 
@@ -50,6 +104,13 @@ namespace JogoRPG
                 {
                     if (!atual.EstaVivo) continue;
                     if (!TimeVivo(timeJogador) || !TimeVivo(timeInimigo)) break;
+
+                    atual.AplicarEfeitos();
+                    if (!atual.EstaVivo)
+                    {
+                        Console.WriteLine($"{atual.Nome} morreu por efeitos negativos!");
+                        continue;
+                    }
 
                     if (timeJogador.Contains(atual))
                         TurnoJogador(atual, timeJogador, timeInimigo, inventarioJogador);
@@ -64,7 +125,7 @@ namespace JogoRPG
                 turno++;
             }
 
-            Console.WriteLine(TimeVivo(timeJogador) ? "\n🏆 Seu time venceu!" : "\n💀 Seu time foi derrotado!");
+            return TimeVivo(timeJogador);
         }
 
         static bool TimeVivo(List<Personagem> time) => time.Any(p => p.EstaVivo);
@@ -80,14 +141,16 @@ namespace JogoRPG
                 for (int i = 0; i < inventario.Count; i++)
                     Console.WriteLine($"{i + 1} - {inventario[i].Nome}");
                 int escolha = LerOpcaoEntre(1, inventario.Count) - 1;
+                var itemEscolhido = inventario[escolha];
 
-                var vivos = timeJogador.Where(p => p.EstaVivo).ToList();
-                Console.WriteLine("Usar em quem?");
+                var poolAlvos = itemEscolhido.AlvoEhInimigo ? timeInimigo : timeJogador;
+                var vivos = poolAlvos.Where(p => p.EstaVivo).ToList();
+                Console.WriteLine(itemEscolhido.AlvoEhInimigo ? "Usar em qual inimigo?" : "Usar em quem?");
                 for (int i = 0; i < vivos.Count; i++)
                     Console.WriteLine($"{i + 1} - {vivos[i].Nome} ({vivos[i].Vida}/{vivos[i].VidaMaxima} HP)");
                 int alvoIdx = LerOpcaoEntre(1, vivos.Count) - 1;
 
-                inventario[escolha].Usar(vivos[alvoIdx]);
+                itemEscolhido.Usar(vivos[alvoIdx]);
                 inventario.RemoveAt(escolha);
                 return;
             }
@@ -103,7 +166,10 @@ namespace JogoRPG
                     Console.WriteLine($"{i + 1} - {inimigosVivos[i].Nome} ({inimigosVivos[i].Vida}/{inimigosVivos[i].VidaMaxima} HP)");
                 int alvoIdx = LerOpcaoEntre(1, inimigosVivos.Count) - 1;
 
-                inimigosVivos[alvoIdx].ReceberDano(resultado.Valor);
+                var alvo = inimigosVivos[alvoIdx];
+                alvo.ReceberDano(resultado.Valor);
+                if (resultado.AplicaDebuff)
+                    alvo.AplicarEfeitoDeAtaque("Fraqueza", -4, 2);
             }
             else
             {
@@ -125,7 +191,10 @@ namespace JogoRPG
             if (resultado.Tipo == TipoAcao.Ataque)
             {
                 var alvos = timeJogador.Where(p => p.EstaVivo).ToList();
-                alvos[rng.Next(alvos.Count)].ReceberDano(resultado.Valor);
+                var alvo = alvos[rng.Next(alvos.Count)];
+                alvo.ReceberDano(resultado.Valor);
+                if (resultado.AplicaDebuff)
+                    alvo.AplicarEfeitoDeAtaque("Fraqueza", -4, 2);
             }
             else
             {
@@ -133,11 +202,90 @@ namespace JogoRPG
             }
         }
 
+        static void Loja(List<Item> inventario, ref int ouro)
+        {
+            var catalogo = new List<(string descricao, int preco, Func<Item> criar)>
+            {
+                ("Poção de Cura (25 HP)", 15, () => new PocaoCura(25)),
+                ("Poção de Força (+5 ataque, 3 turnos)", 20, () => new PocaoForca(5, 3)),
+                ("Frasco de Veneno (6 dano/turno, 3 turnos)", 25, () => new FrascoVeneno(6, 3)),
+            };
+
+            while (true)
+            {
+                Console.WriteLine($"\n===== LOJA (Ouro: {ouro}) =====");
+                for (int i = 0; i < catalogo.Count; i++)
+                    Console.WriteLine($"{i + 1} - {catalogo[i].descricao} — {catalogo[i].preco} ouro");
+                Console.WriteLine("0 - Sair da loja");
+
+                int escolha = LerOpcaoEntre(0, catalogo.Count);
+                if (escolha == 0) break;
+
+                var item = catalogo[escolha - 1];
+                if (ouro < item.preco)
+                {
+                    Console.WriteLine("Ouro insuficiente!");
+                    continue;
+                }
+
+                ouro -= item.preco;
+                inventario.Add(item.criar());
+                Console.WriteLine("Comprado!");
+            }
+        }
+
+        static void SalvarJogo(List<Personagem> time, List<Item> inventario, int ouro, int onda)
+        {
+            var dados = new JogoSalvo
+            {
+                Ouro = ouro,
+                Onda = onda,
+                Time = time.Select(p => new PersonagemSalvo { Tipo = p.GetType().Name, Nome = p.Nome, Vida = p.Vida }).ToList(),
+                Inventario = inventario.Select(i => i.Nome).ToList(),
+            };
+
+            string json = JsonSerializer.Serialize(dados, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(ArquivoSave, json);
+            Console.WriteLine($"Jogo salvo em {ArquivoSave}!");
+        }
+
+        static void CarregarJogo(out List<Personagem> time, out List<Item> inventario, out int ouro, out int onda)
+        {
+            string json = File.ReadAllText(ArquivoSave);
+            var dados = JsonSerializer.Deserialize<JogoSalvo>(json);
+
+            time = dados.Time.Select(p => CriarPersonagemComVida(p.Tipo, p.Nome, p.Vida)).ToList();
+            inventario = dados.Inventario.Select(RecriarItemPorNome).ToList();
+            ouro = dados.Ouro;
+            onda = dados.Onda;
+
+            Console.WriteLine($"Jogo carregado! Onda {onda}, Ouro: {ouro}");
+        }
+
+        static Personagem CriarPersonagemComVida(string tipo, string nome, int vidaSalva)
+        {
+            Personagem p = CriarPersonagemPorTipo(tipo, nome);
+            int diferenca = p.Vida - vidaSalva;
+            if (diferenca > 0) p.ReceberDano(diferenca);
+            return p;
+        }
+
+        static Item RecriarItemPorNome(string nome)
+        {
+            return nome switch
+            {
+                "Poção de Cura" => new PocaoCura(25),
+                "Poção de Força" => new PocaoForca(5, 3),
+                "Frasco de Veneno" => new FrascoVeneno(6, 3),
+                _ => new PocaoCura(25),
+            };
+        }
+
         static Personagem EscolherPersonagem(string nomeSlot)
         {
             Console.WriteLine($"\n{nomeSlot}:");
-            Console.WriteLine("1-Guerreiro 2-Mago 3-Arqueiro 4-Curandeiro");
-            int tipo = LerOpcaoEntre(1, 4);
+            Console.WriteLine("1-Guerreiro 2-Mago 3-Arqueiro 4-Curandeiro 5-Ladrão");
+            int tipo = LerOpcaoEntre(1, 5);
             Console.Write("Nome do personagem: ");
             string nome = Console.ReadLine();
             return CriarPersonagem(tipo, nome);
@@ -145,14 +293,28 @@ namespace JogoRPG
 
         static Personagem CriarPersonagem(int tipo, string nome)
         {
-            switch (tipo)
+            return tipo switch
             {
-                case 1: return new Guerreiro(nome);
-                case 2: return new Mago(nome);
-                case 3: return new Arqueiro(nome);
-                case 4: return new Curandeiro(nome);
-                default: throw new ArgumentException("Tipo inválido.");
-            }
+                1 => new Guerreiro(nome),
+                2 => new Mago(nome),
+                3 => new Arqueiro(nome),
+                4 => new Curandeiro(nome),
+                5 => new Ladrao(nome),
+                _ => throw new ArgumentException("Tipo inválido."),
+            };
+        }
+
+        static Personagem CriarPersonagemPorTipo(string tipo, string nome)
+        {
+            return tipo switch
+            {
+                "Guerreiro" => new Guerreiro(nome),
+                "Mago" => new Mago(nome),
+                "Arqueiro" => new Arqueiro(nome),
+                "Curandeiro" => new Curandeiro(nome),
+                "Ladrao" => new Ladrao(nome),
+                _ => throw new ArgumentException("Tipo desconhecido: " + tipo),
+            };
         }
 
         static int LerOpcaoEntre(int min, int max)
