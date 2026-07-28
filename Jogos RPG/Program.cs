@@ -1,15 +1,13 @@
-﻿// Program.cs
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Text.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 
 namespace JogoRPG
 {
+    internal enum ResultadoBatalha { Vitoria, Derrota, Fuga }
+
     internal class PersonagemSalvo
     {
         public string Tipo { get; set; }
@@ -58,19 +56,34 @@ namespace JogoRPG
             while (TimeVivo(timeJogador))
             {
                 Console.WriteLine($"\n########## ONDA {onda} ##########");
-                var timeInimigo = new List<Personagem>
+
+                List<Personagem> timeInimigo;
+                if (onda % 3 == 0)
                 {
-                    CriarPersonagem(rng.Next(1, 6), $"Inimigo {onda}-1"),
-                    CriarPersonagem(rng.Next(1, 6), $"Inimigo {onda}-2"),
-                };
-                Console.WriteLine("Inimigos:");
-                foreach (var i in timeInimigo)
-                    Console.WriteLine($" - {i.Nome} ({i.GetType().Name})");
+                    string[] nomesChefes = { "Rei Esqueleto", "Dragão Ancião", "Bruxa das Sombras", "Golem de Pedra" };
+                    string nomeChefe = nomesChefes[rng.Next(nomesChefes.Length)];
+                    timeInimigo = new List<Personagem> { new Chefe(nomeChefe) };
+                    Console.WriteLine($"⚠️  Um CHEFE apareceu: {nomeChefe}!");
+                }
+                else
+                {
+                    timeInimigo = GerarInimigosComuns(onda);
+                    Console.WriteLine("Inimigos:");
+                    foreach (var i in timeInimigo)
+                        Console.WriteLine($" - {i.Nome} ({i.GetType().Name})");
+                }
 
-                bool venceu = Batalha(timeJogador, timeInimigo, inventarioJogador);
-                if (!venceu) break;
+                ResultadoBatalha resultadoBatalha = Batalha(timeJogador, timeInimigo, inventarioJogador);
 
-                int recompensa = 30 + rng.Next(0, 20);
+                if (resultadoBatalha == ResultadoBatalha.Derrota) break;
+
+                if (resultadoBatalha == ResultadoBatalha.Fuga)
+                {
+                    Console.WriteLine("Vocês fugiram! Tentem essa onda de novo quando estiverem prontos.");
+                    continue;
+                }
+
+                int recompensa = (onda % 3 == 0) ? 80 + rng.Next(0, 30) : 30 + rng.Next(0, 20);
                 ouro += recompensa;
                 Console.WriteLine($"\nVocê venceu a onda {onda}! +{recompensa} de ouro (total: {ouro})");
 
@@ -89,7 +102,23 @@ namespace JogoRPG
             Console.WriteLine(TimeVivo(timeJogador) ? "" : "\n💀 Fim de jogo — seu time foi derrotado.");
         }
 
-        static bool Batalha(List<Personagem> timeJogador, List<Personagem> timeInimigo, List<Item> inventarioJogador)
+        static List<Personagem> GerarInimigosComuns(int onda)
+        {
+            int tipo1 = rng.Next(1, 6);
+            int tipo2;
+            do
+            {
+                tipo2 = rng.Next(1, 6);
+            } while (tipo1 == 4 && tipo2 == 4); // 4 = Curandeiro — nunca os dois juntos
+
+            return new List<Personagem>
+            {
+                CriarPersonagem(tipo1, $"Inimigo {onda}-1"),
+                CriarPersonagem(tipo2, $"Inimigo {onda}-2"),
+            };
+        }
+
+        static ResultadoBatalha Batalha(List<Personagem> timeJogador, List<Personagem> timeInimigo, List<Item> inventarioJogador)
         {
             var ordemDeTurno = new List<Personagem>();
             ordemDeTurno.AddRange(timeJogador);
@@ -113,9 +142,14 @@ namespace JogoRPG
                     }
 
                     if (timeJogador.Contains(atual))
-                        TurnoJogador(atual, timeJogador, timeInimigo, inventarioJogador);
+                    {
+                        bool fugiu = TurnoJogador(atual, timeJogador, timeInimigo, inventarioJogador);
+                        if (fugiu) return ResultadoBatalha.Fuga;
+                    }
                     else
+                    {
                         TurnoInimigo(atual, timeInimigo, timeJogador);
+                    }
                 }
 
                 Console.WriteLine("\n-- Status --");
@@ -125,19 +159,31 @@ namespace JogoRPG
                 turno++;
             }
 
-            return TimeVivo(timeJogador);
+            return TimeVivo(timeJogador) ? ResultadoBatalha.Vitoria : ResultadoBatalha.Derrota;
         }
 
         static bool TimeVivo(List<Personagem> time) => time.Any(p => p.EstaVivo);
 
-        static void TurnoJogador(Personagem atual, List<Personagem> timeJogador, List<Personagem> timeInimigo, List<Item> inventario)
+        static bool TurnoJogador(Personagem atual, List<Personagem> timeJogador, List<Personagem> timeInimigo, List<Item> inventario)
         {
             Console.WriteLine($"\nTurno de {atual.Nome} ({atual.GetType().Name})");
-            Console.WriteLine("1 - Agir (atacar/curar)  2 - Usar item");
-            int opcao = LerOpcaoEntre(1, inventario.Any() ? 2 : 1);
+            Console.WriteLine("1 - Agir (atacar/curar)  2 - Usar item  3 - Fugir");
+            int opcao = LerOpcaoEntre(1, 3);
+
+            if (opcao == 3)
+            {
+                Console.WriteLine($"{atual.Nome} deu o sinal de retirada! O grupo foge da batalha.");
+                return true;
+            }
 
             if (opcao == 2)
             {
+                if (!inventario.Any())
+                {
+                    Console.WriteLine("Você não tem itens! Turno perdido.");
+                    return false;
+                }
+
                 for (int i = 0; i < inventario.Count; i++)
                     Console.WriteLine($"{i + 1} - {inventario[i].Nome}");
                 int escolha = LerOpcaoEntre(1, inventario.Count) - 1;
@@ -152,7 +198,7 @@ namespace JogoRPG
 
                 itemEscolhido.Usar(vivos[alvoIdx]);
                 inventario.RemoveAt(escolha);
-                return;
+                return false;
             }
 
             var resultado = atual.Agir();
@@ -181,6 +227,8 @@ namespace JogoRPG
 
                 aliadosVivos[alvoIdx].Curar(resultado.Valor);
             }
+
+            return false;
         }
 
         static void TurnoInimigo(Personagem atual, List<Personagem> timeInimigo, List<Personagem> timeJogador)
@@ -190,11 +238,14 @@ namespace JogoRPG
 
             if (resultado.Tipo == TipoAcao.Ataque)
             {
-                var alvos = timeJogador.Where(p => p.EstaVivo).ToList();
-                var alvo = alvos[rng.Next(alvos.Count)];
-                alvo.ReceberDano(resultado.Valor);
-                if (resultado.AplicaDebuff)
-                    alvo.AplicarEfeitoDeAtaque("Fraqueza", -4, 2);
+                if (resultado.Valor > 0)
+                {
+                    var alvos = timeJogador.Where(p => p.EstaVivo).ToList();
+                    var alvo = alvos[rng.Next(alvos.Count)];
+                    alvo.ReceberDano(resultado.Valor);
+                    if (resultado.AplicaDebuff)
+                        alvo.AplicarEfeitoDeAtaque("Fraqueza", -4, 2);
+                }
             }
             else
             {
@@ -313,6 +364,7 @@ namespace JogoRPG
                 "Arqueiro" => new Arqueiro(nome),
                 "Curandeiro" => new Curandeiro(nome),
                 "Ladrao" => new Ladrao(nome),
+                "Chefe" => new Chefe(nome),
                 _ => throw new ArgumentException("Tipo desconhecido: " + tipo),
             };
         }
