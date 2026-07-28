@@ -10,23 +10,17 @@ namespace JogoRPG
     {
         private static Random rng = new Random();
 
-        public Guerreiro(string nome) : base(nome, vidaMaxima: 120, ataqueBase: 15)
+        public Guerreiro(string nome) : base(nome, vidaMaxima: 120, ataqueBase: 15) { }
+
+        public override ResultadoAcao Agir()
         {
-        }
+            bool golpePoderoso = rng.Next(0, 100) < 25;
+            int dano = golpePoderoso ? AtaqueBase * 2 : AtaqueBase;
+            string desc = golpePoderoso
+                ? $"{Nome} desfere um GOLPE PODEROSO! ({dano} de dano)"
+                : $"{Nome} ataca com a espada. ({dano} de dano)";
 
-        public override int Atacar()
-        {
-            bool golpePoderoso = rng.Next(0, 100) < 25; // 25% de chance
-
-            if (golpePoderoso)
-            {
-                int dano = AtaqueBase * 2;
-                Console.WriteLine($"{Nome} desfere um GOLPE PODEROSO! ({dano} de dano)");
-                return dano;
-            }
-
-            Console.WriteLine($"{Nome} ataca com a espada. ({AtaqueBase} de dano)");
-            return AtaqueBase;
+            return new ResultadoAcao { Tipo = TipoAcao.Ataque, Valor = dano, Descricao = desc };
         }
     }
 }

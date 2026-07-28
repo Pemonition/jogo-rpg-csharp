@@ -11,23 +11,17 @@ namespace JogoRPG
     {
         private static Random rng = new Random();
 
-        public Arqueiro(string nome) : base(nome, vidaMaxima: 90, ataqueBase: 12)
+        public Arqueiro(string nome) : base(nome, vidaMaxima: 90, ataqueBase: 12) { }
+
+        public override ResultadoAcao Agir()
         {
-        }
+            bool tiroCertero = rng.Next(0, 100) < 40;
+            int dano = tiroCertero ? (int)(AtaqueBase * 1.5) : AtaqueBase;
+            string desc = tiroCertero
+                ? $"{Nome} acerta um TIRO CERTEIRO! ({dano} de dano)"
+                : $"{Nome} dispara uma flecha. ({dano} de dano)";
 
-        public override int Atacar()
-        {
-            bool tiroCertero = rng.Next(0, 100) < 40; // 40% de chance (mais frequente, menos dano extra)
-
-            if (tiroCertero)
-            {
-                int dano = (int)(AtaqueBase * 1.5);
-                Console.WriteLine($"{Nome} acerta um TIRO CERTEIRO! ({dano} de dano)");
-                return dano;
-            }
-
-            Console.WriteLine($"{Nome} dispara uma flecha. ({AtaqueBase} de dano)");
-            return AtaqueBase;
+            return new ResultadoAcao { Tipo = TipoAcao.Ataque, Valor = dano, Descricao = desc };
         }
     }
 }

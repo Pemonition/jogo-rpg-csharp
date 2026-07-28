@@ -11,23 +11,17 @@ namespace JogoRPG
     {
         private static Random rng = new Random();
 
-        public Mago(string nome) : base(nome, vidaMaxima: 80, ataqueBase: 20)
+        public Mago(string nome) : base(nome, vidaMaxima: 80, ataqueBase: 20) { }
+
+        public override ResultadoAcao Agir()
         {
-        }
+            bool criticoMagico = rng.Next(0, 100) < 30;
+            int dano = criticoMagico ? (int)(AtaqueBase * 1.8) : AtaqueBase;
+            string desc = criticoMagico
+                ? $"{Nome} conjura uma BOLA DE FOGO CRÍTICA! ({dano} de dano)"
+                : $"{Nome} lança um raio arcano. ({dano} de dano)";
 
-        public override int Atacar()
-        {
-            bool criticoMagico = rng.Next(0, 100) < 30; // 30% de chance
-
-            if (criticoMagico)
-            {
-                int dano = (int)(AtaqueBase * 1.8);
-                Console.WriteLine($"{Nome} conjura uma BOLA DE FOGO CRÍTICA! ({dano} de dano)");
-                return dano;
-            }
-
-            Console.WriteLine($"{Nome} lança um raio arcano. ({AtaqueBase} de dano)");
-            return AtaqueBase;
+            return new ResultadoAcao { Tipo = TipoAcao.Ataque, Valor = dano, Descricao = desc };
         }
     }
 }

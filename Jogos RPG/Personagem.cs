@@ -6,6 +6,15 @@ using System.Threading.Tasks;
 
 namespace JogoRPG
 {
+    internal enum TipoAcao { Ataque, Cura }
+
+    internal class ResultadoAcao
+    {
+        public TipoAcao Tipo { get; set; }
+        public int Valor { get; set; }
+        public string Descricao { get; set; }
+    }
+
     internal abstract class Personagem
     {
         public string Nome { get; set; }
@@ -23,8 +32,8 @@ namespace JogoRPG
             AtaqueBase = ataqueBase;
         }
 
-        // Cada subclasse é OBRIGADA a definir seu próprio jeito de atacar
-        public abstract int Atacar();
+        // Cada subclasse decide SUA ação — mas quem aplica o efeito é sempre o Program.cs
+        public abstract ResultadoAcao Agir();
 
         public void ReceberDano(int dano)
         {
@@ -32,9 +41,20 @@ namespace JogoRPG
             if (Vida < 0) Vida = 0;
         }
 
+        public void Curar(int quantidade)
+        {
+            Vida += quantidade;
+            if (Vida > VidaMaxima) Vida = VidaMaxima;
+        }
+
+        public void AumentarAtaque(int quantidade)
+        {
+            AtaqueBase += quantidade;
+        }
+
         public void MostrarStatus()
         {
-            Console.WriteLine($"{Nome}: {Vida}/{VidaMaxima} HP");
+            Console.WriteLine($"{Nome} [{GetType().Name}]: {Vida}/{VidaMaxima} HP");
         }
     }
 }
